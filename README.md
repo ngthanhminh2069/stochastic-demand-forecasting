@@ -70,7 +70,74 @@ $10 item's, which a flat dollar assumption would miss entirely.
 └── tests/
 ```
 
-## Running it
+## How the pipeline actually runs
+
+Here's what happens, in order, when you run `scripts/run_pipeline.py` —
+useful if you're trying to modify or debug any single piece of it.
+
+```mermaid
+flowchart TD
+    A["scripts/run_pipeline.py"] --> B["pipeline.load_data()"]
+    B --> C["data_loader.load_raw_data()<br/>reads data/raw/sku_location_demand.csv"]
+
+    A --> D["pipeline.run_all_leaves(df, n_jobs)"]
+    D --> E{"n_jobs > 1?"}
+    E -- "no (default)" --> F["plain for-loop over<br/>all (sku, location) pairs"]
+    E -- "yes" --> G["multiprocessing.Pool(n_jobs)<br/>initializer loads df ONCE per worker"]
+    G --> H["each worker calls run_leaf_backtest<br/>with xgb_n_jobs=1"]
+    F --> I["run_leaf_backtest(df, sku, location)"]
+    H --> I
+
+    subgraph PERLEAF ["Per leaf: run_leaf_backtest()"]
+        I --> J["features.build_features()<br/>lag-7/14/28, rolling mean/std, calendar"]
+        J --> K["backtest.generate_folds()<br/>walk-forward, 14-day horizon, 28-day step"]
+        K --> L["for each fold:"]
+        L --> M["split into train / calibration<br/>(last 30 train days) / validation"]
+        M --> N["probabilistic.fit_quantile_models()<br/>3x XGBRegressor, quantile_alpha 0.1/0.5/0.9"]
+        N --> O["probabilistic.conformal_calibrate()<br/>offset per quantile from calibration residuals"]
+        O --> P["apply_conformal_offsets() + predict on validation"]
+        P --> Q["pinball_loss per quantile<br/>eval_metrics on median<br/>inventory.newsvendor_cost (price-derived $)"]
+        P --> R["accumulate residuals +<br/>below/above-quantile flags"]
+        L -.->|next fold| L
+        I --> S["drop_detection.detect_drops()<br/>CUSUM on the raw leaf series"]
+    end
+
+    D --> T["pipeline.reconcile_latest_forecasts()"]
+    T --> U["hierarchy.aggregate_leaf_forecasts()<br/>sum leaves -> SKU / Location / Total"]
+
+    D --> V["pipeline.aggregate_diagnostics()"]
+    V --> W["reliability table, pooled residuals,<br/>pinball-by-quantile, per-leaf MAE"]
+
+    A --> X["plotting.*<br/>9 figures written to reports/figures/"]
+```
+
+A few things worth calling out that aren't obvious from the code alone:
+
+**The calibration split matters.** Each fold's training data isn't used
+whole — the last `CONFORMAL_CALIB_DAYS` (30 days) are carved off as a
+held-out calibration set *before* fitting the quantile models. Conformal
+calibration only works if it's calibrated on data the model didn't see
+during training; using the training set itself for calibration would
+just measure how well the model memorized its own data.
+
+**Multiprocessing is opt-in and pins XGBoost's threading.** The default
+(`n_jobs=1`) runs leaves one at a time, and each XGBoost model is free to
+use every CPU core it wants. Pass `--n-jobs 4` and two things change:
+`multiprocessing.Pool` hands out leaves to 4 worker processes, and every
+XGBoost model inside those workers gets `n_jobs=1` forced onto it. Skip
+that second part and you'd have 4 processes each trying to grab every
+core for their own XGBoost model — everything gets slower, not faster,
+because the processes spend more time fighting over cores than training.
+The pool's initializer also loads the dataframe into each worker exactly
+once (not once per leaf), which matters more than it sounds like it
+should once you're running 100 leaves.
+
+**Results don't depend on how many workers you use.** XGBoost's
+`random_state` is fixed, so a leaf backtested sequentially and the same
+leaf backtested inside a worker process produce bit-identical output —
+`n_jobs` only changes wall-clock time, never the numbers.
+
+
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
