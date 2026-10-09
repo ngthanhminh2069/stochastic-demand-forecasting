@@ -410,21 +410,21 @@ $P_{50}$ represents the median. $P_{90}$ specifies the upper bound such that dem
     st.markdown(f"### {'📊 Khối 2: So sánh Point Forecast vs. Stochastic Forecast' if is_vi else '📊 Block 2: Point Forecast vs. Stochastic Forecast'}")
     if is_vi:
         st.markdown("""
-        | Tiêu chí | Point Forecast truyền thống | Stochastic Forecast trong Pipeline này |
+        | Tiêu chí | Hướng tiếp cận Point Forecast | Hướng tiếp cận Stochastic Forecast |
         | :--- | :--- | :--- |
-        | **Đầu ra mô hình** | Một con số đơn lẻ (Conditional Mean) | Toàn bộ phân phối xác suất qua 8 Quantiles ($P_{05} \\dots P_{97.5}$) |
-        | **Định lượng rủi ro** | Mù mờ về biên độ dao động và đuôi rủi ro | Định lượng rõ kịch bản sàn ($P_{10}$), cơ sở ($P_{50}$) và đỉnh ($P_{90}$) |
-        | **Tính Safety Stock** | Ép công thức phân phối chuẩn $z \\cdot \\sigma \\cdot \\sqrt{L}$ | Trích xuất trực tiếp từ phân phối mô phỏng phi tham số |
-        | **Hàm mất mát đánh giá** | MAE / RMSE đối xứng (phạt thừa ngang thiếu) | Pinball Loss theo từng Quantile & Newsvendor Loss theo Margin |
+        | **Đầu ra mô hình** | Ước lượng giá trị trung tâm (Conditional Mean / Median) | Ước lượng toàn bộ phân phối xác suất qua 8 Quantiles ($P_{05} \\dots P_{97.5}$) |
+        | **Thông tin rủi ro** | Đo lường độ bất định qua độ lệch chuẩn tổng thể | Định lượng rõ dải kịch bản sàn ($P_{10}$), trung vị ($P_{50}$) và cận trên ($P_{90}$) |
+        | **Định cỡ tồn kho** | Công thức tham số giải tích (thường dựa trên giả định chuẩn $z \\cdot \\sigma \\cdot \\sqrt{L}$) | Trích xuất phân vị phi tham số trực tiếp từ kịch bản mô phỏng Lead Time |
+        | **Hàm mục tiêu đánh giá** | Tối ưu sai số đối xứng (MAE, RMSE, WAPE) | Kết hợp Pinball Loss theo từng phân vị và hàm chi phí bất đối xứng Newsvendor |
         """)
     else:
         st.markdown("""
-        | Criterion | Traditional Point Forecasting | Stochastic Forecasting (This Pipeline) |
+        | Criterion | Point Forecasting Approach | Stochastic Forecasting Approach |
         | :--- | :--- | :--- |
-        | **Model Output** | Single deterministic value (Conditional Mean) | Full empirical distribution via 8 Quantiles ($P_{05} \\dots P_{97.5}$) |
-        | **Risk Sizing** | No distribution support; assumes homoscedastic variance | Explicit lower ($P_{10}$), median ($P_{50}$), and upper-tail ($P_{90}$) intervals |
-        | **Safety Stock Sizing** | Formulaic normal assumption ($z \\cdot \\sigma \\cdot \\sqrt{L}$) | Direct non-parametric extraction from simulated lead-time scenarios |
-        | **Evaluation Metric** | Symmetric MAE / RMSE (penalizes over/under equally) | Quantile Pinball Loss & Financial Margin-based Newsvendor Loss |
+        | **Model Output** | Central tendency estimate (Conditional Mean / Median) | Full empirical distribution via 8 Quantiles ($P_{05} \\dots P_{97.5}$) |
+        | **Risk Information** | Aggregate uncertainty measured via pooled standard deviation | Explicit scenario bounds: lower tail ($P_{10}$), median ($P_{50}$), upper tail ($P_{90}$) |
+        | **Inventory Sizing** | Parametric analytical formulas (e.g. normal assumption $z \\cdot \\sigma \\cdot \\sqrt{L}$) | Non-parametric quantile extraction from simulated lead-time sample paths |
+        | **Evaluation Objective** | Symmetric statistical loss (MAE, RMSE, WAPE) | Quantile Pinball Loss combined with asymmetric financial Newsvendor loss |
         """)
 
     # Block 3 & 4: Insight
@@ -1088,36 +1088,40 @@ Persistent mild downward shifts accumulate until crossing the $-4\\sigma$ decisi
     st.image(str(FIGURES_DIR / "residual_diagnostics.png"), caption="Residual diagnostics & QQ-plot confirming heavy-tailed error structure." if not is_vi else "Kiểm định phần dư & QQ-plot chứng minh hiện tượng đuôi dày (Heavy Tails).", use_container_width=True)
 
     # Block 3: Comparative Matrix Table
-    st.markdown(f"### {'💻 Khối 3: Ma trận Đối chuẩn 10 Tiêu chí với Standard SCM' if is_vi else '💻 Block 3: 10-Criterion Benchmark vs Standard Enterprise SCM'}")
+    st.markdown(f"### {'💻 Khối 3: So sánh Thiết kế Kỹ thuật: Point Forecasting vs. Stochastic Framework' if is_vi else '💻 Block 3: Architectural Comparison: Point Forecasting vs. Stochastic Framework'}")
     if is_vi:
         st.markdown("""
-        | # | Tiêu chí so sánh | Quy trình SCM truyền thống | Pipeline Dự án này | Lợi ích Thực tế |
+        Bảng phân tích sự khác biệt về mặt thiết kế kỹ thuật giữa tiếp cận **Dự báo Điểm (Point Forecasting)** truyền thống và **Khung Dự báo Xác suất (Stochastic Framework)**. Mỗi hướng tiếp cận đều có ưu thế và phạm vi ứng dụng riêng trong vận hành chuỗi cung ứng:
+
+        | # | Tiêu chí kỹ thuật | Tiếp cận Point Forecasting | Tiếp cận Stochastic Framework | Đặc tính Vận hành |
         | :-: | :--- | :--- | :--- | :--- |
-        | **1** | **Đầu ra dự báo** | Point forecast duy nhất (Mean/Median). | 8 Quantiles xác suất ($P_{05} \\dots P_{97.5}$). | Định lượng chính xác dải biến thiên và rủi ro. |
-        | **2** | **Độ tin cậy khoảng dự báo** | Giả định chuẩn Gauss hoặc không có. | Split Conformal Prediction theo Horizon. | Cam kết thống kê: Khoảng P90 bao phủ đúng 90% thực tế. |
-        | **3** | **Kỹ thuật tạo biến chuỗi** | Tạo Lag/Rolling trên toàn chuỗi (dễ rò rỉ). | Direct Multi-Horizon As-of-Origin. | **Triệt tiêu 100% rò rỉ dữ liệu tương lai.** |
-        | **4** | **Phương pháp kiểm thử** | Chia Train/Test tĩnh hoặc K-Fold ngẫu nhiên. | Walk-forward Backtesting 21 folds. | Đánh giá trung thực năng lực ngoài mẫu. |
-        | **5** | **Cộng gộp cấp bậc** | Cộng trung bình hoặc bổ tỷ lệ Top-Down. | Gaussian Copula Sample Paths Bottom-Up. | **Khai thác Risk Pooling (tiết kiệm ~78% Safety Stock).** |
-        | **6** | **Thước đo hiệu quả** | Chỉ đo lỗi toán học: MAE, RMSE, MAPE. | Đo WAPE, MASE + Chi phí Newsvendor ($/ngày). | Đo lường trực tiếp tác động tài chính. |
-        | **7** | **Giám sát đứt gãy** | Ngưỡng tĩnh (báo động khi giảm cố định). | CUSUM tích lũy sai lệch âm kéo dài. | Phát hiện sớm xu hướng suy giảm âm ỉ, tự động reset. |
-        | **8** | **Tính Safety Stock** | Công thức cổ điển $z \\cdot \\sigma \\cdot \\sqrt{L}$. | Trích xuất phi tham số từ 2.000 mẫu Lead Time. | Tránh thiếu hàng khi nhu cầu lệch phải hoặc trễ hạn. |
-        | **9** | **Tích hợp quyết định tồn kho** | Tách rời đội Data và đội Kho. | Tích hợp Critical Ratio ($CR \\approx 0.975$). | Hàng lãi cao tự động được bảo vệ ở mức cao hơn. |
-        | **10** | **Kiến trúc phần cứng** | Đơn luồng hoặc tranh chấp CPU. | Multiprocessing Pool ghim luồng (1 thread/worker). | Xử lý 100 chuỗi song song ổn định, không nghẽn luồng. |
+        | **1** | **Mục tiêu & Đầu ra dự báo** | Dự báo giá trị trung bình/trung vị ($\hat{y}_t$). Phù hợp lập kế hoạch ngân sách và tổng thể. | Dự báo toàn bộ phân phối xác suất qua 8 Quantiles ($P_{05} \\dots P_{97.5}$). | Cung cấp dải biến thiên và rủi ro đuôi, trực tiếp phục vụ định cỡ tồn kho an toàn. |
+        | **2** | **Khoảng dự báo & Hiệu chuẩn** | Ước lượng khoảng tin cậy qua phương sai phần dư (thường dựa trên giả định tham số). | Hiệu chuẩn phân vị phi tham số bằng Split Conformal Prediction theo Horizon. | Khoảng bao phủ thực nghiệm ngoài mẫu tiệm cận chính xác xác suất danh định. |
+        | **3** | **Chiến lược đặc trưng chuỗi** | Mô hình đệ quy (Recursive multi-step) hoặc lag cố định; đơn giản và tối ưu tốc độ. | Direct Multi-Horizon As-of-Origin (mô hình riêng cho từng bước $h \in [1..14]$). | Tránh tích lũy sai số qua các bước xa và bảo toàn tính nhân quả tại thời điểm dự báo. |
+        | **4** | **Phương pháp kiểm thử** | Kiểm thử chuỗi thời gian (Rolling/Expanding Window) đánh giá sai số điểm (MAE, WAPE). | Walk-forward Backtesting 21 folds đánh giá đồng thời sai số điểm và phân vị (Pinball loss). | Đánh giá toàn diện cả độ chính xác trung tâm và chất lượng của toàn bộ hàm phân phối. |
+        | **5** | **Cộng gộp cấp bậc** | Cộng dồn tuyến tính giá trị điểm từ dưới lên (Bottom-up) hoặc bổ tỷ lệ (Top-down). | Mô phỏng đường mẫu kết hợp (Joint Sample Paths) qua Gaussian Copula rồi cộng Bottom-up. | Bảo toàn cấu trúc tương quan chéo khi phân vị không có tính cộng tuyến tính, phân tích Risk Pooling. |
+        | **6** | **Thước đo đánh giá** | Các chỉ số thống kê chuẩn: WAPE, MASE, RMSE (tập trung vào độ khớp dữ liệu). | Kết hợp WAPE/MASE với hàm chi phí tổn thất kinh tế Newsvendor ($/ngày). | Đo lường sai số dự báo trực tiếp dưới góc độ đánh đổi tài chính giữa thiếu hàng và tồn ứ. |
+        | **7** | **Giám sát đứt gãy / Trôi dạt** | Theo dõi Tracking Signal hoặc thiết lập ngưỡng cảnh báo sai số định kỳ. | Biểu đồ kiểm soát quá trình CUSUM một phía tích lũy sai lệch âm kéo dài kèm auto-reset. | Tăng độ nhạy phát hiện sớm các đợt sụt giảm nhu cầu âm ỉ mà các ngưỡng tức thời dễ bỏ sót. |
+        | **8** | **Định cỡ Tồn kho an toàn** | Công thức tham số giải tích ($z \\cdot \\sigma \\cdot \\sqrt{L}$); tính toán nhanh, chuẩn hóa tốt. | Trích xuất phi tham số trực tiếp từ phân phối nhu cầu Lead Time mô phỏng. | Thích ứng tự nhiên với chuỗi nhu cầu có độ lệch phải (skewness) hoặc biến động thời gian giao hàng. |
+        | **9** | **Khớp nối quyết định tồn kho** | Quy trình hai giai đoạn tách rời: Dự báo nhu cầu -> Chuyển số liệu sang module hoạch định tồn kho. | Khớp nối trực tiếp phân vị dự báo với Tỷ số tới hạn kinh tế (Critical Ratio $CR$). | Tự động phân bổ mức đệm an toàn cao hơn cho các mặt hàng có biên lợi nhuận lớn. |
+        | **10** | **Kiến trúc tính toán** | Xử lý tuần tự hoặc chạy mẻ theo đợt (Batch scheduling qua orchestrator). | Multiprocessing Pool ghim luồng (thread pinning) độc lập cho từng tiến trình huấn luyện. | Tận dụng tối đa tài nguyên CPU đa nhân khi đồng thời huấn luyện mô hình đa phân vị cho nhiều chuỗi. |
         """)
     else:
         st.markdown("""
-        | # | Benchmark Dimension | Standard Enterprise SCM Workflow | This Stochastic Pipeline | Quantifiable Business Impact |
+        Architectural comparison between the traditional **Point Forecasting** paradigm and the **Stochastic / Probabilistic Framework**. Both designs offer distinct operational merits depending on supply chain use cases:
+
+        | # | Technical Dimension | Point Forecasting Approach | Stochastic Framework Approach | Operational Significance |
         | :-: | :--- | :--- | :--- | :--- |
-        | **1** | **Forecast Output** | Single deterministic mean/median point. | 8 empirical quantiles ($P_{05} \\dots P_{97.5}$). | Full uncertainty bounds for risk-based inventory sizing. |
-        | **2** | **Interval Validity** | Gaussian assumption or uncalibrated intervals. | Stratified Split Conformal Calibration. | Theoretical guarantee: 90% coverage matches 90% empirical reality. |
-        | **3** | **Feature Engineering** | Unconstrained rolling/lags (leakage prone). | Direct Multi-Horizon As-of-Origin. | **Zero future data leakage guaranteed.** |
-        | **4** | **Validation Method** | Static train/test split or random K-Fold. | 21-fold expanding window backtesting. | Realistic multi-cycle evaluation on 29,400 out-of-sample observations. |
-        | **5** | **Hierarchy Aggregation**| Proportional top-down or naive quantile sum. | Gaussian Copula joint sample path summation. | **Risk pooling exploitation (~78% central safety stock reduction).** |
-        | **6** | **Evaluation Metrics**| Symmetric loss: MAE, RMSE, MAPE. | WAPE, MASE, and Newsvendor financial loss ($/day). | Direct translation of forecasting errors into bottom-line P&L impact. |
-        | **7** | **Drift Detection** | Static thresholds (fixed percentage drop). | One-sided CUSUM process control with auto-reset. | Early detection of gradual sales erosion before stock accumulation. |
-        | **8** | **Safety Stock Sizing**| Closed-form normal formula ($z \\cdot \\sigma \\cdot \\sqrt{L}$). | Non-parametric simulation from 2,000 lead-time draws. | Resilient against right-skewed demand surges and lead-time delays. |
-        | **9** | **Decision Coupling** | Siloed data science vs. inventory teams. | Direct coupling via Critical Ratio ($CR \\approx 0.975$). | High-margin items receive higher service protection automatically. |
-        | **10** | **Compute Architecture**| Single-thread or CPU contention bottleneck. | Thread-pinned Multiprocessing Pool (1 thread/worker). | Linear scaling across CPU cores without context-switching stalls. |
+        | **1** | **Forecast Target & Output** | Conditional mean/median point forecast ($\hat{y}_t$), suitable for macro budgeting. | Empirical probability distribution across 8 quantiles ($P_{05} \\dots P_{97.5}$). | Quantifies variance and tail uncertainty for target service-level inventory sizing. |
+        | **2** | **Intervals & Calibration** | Residual-variance based prediction intervals (typically parametric assumptions). | Non-parametric calibration via Stratified Split Conformal Prediction by horizon. | Empirical out-of-sample coverage tightly aligns with nominal confidence levels. |
+        | **3** | **Feature Strategy** | Recursive multi-step forecasting or fixed lags; straightforward and computationally lean. | Direct Multi-Horizon As-of-Origin models tailored per horizon step $h \in [1..14]$. | Mitigates recursive error accumulation and guarantees strict causal time alignment. |
+        | **4** | **Validation Method** | Rolling/Expanding window time-series splits scored on point error metrics (MAE, WAPE). | 21-fold walk-forward backtest evaluating both point metrics and quantile Pinball loss. | Evaluates predictive stability for both central estimates and distributional spread. |
+        | **5** | **Hierarchy Aggregation** | Linear summation of point forecasts bottom-up or historical proportional top-down. | Joint sample path simulation via Gaussian Copula aggregated bottom-up. | Preserves spatial cross-correlation since quantiles are non-additive; enables risk pooling. |
+        | **6** | **Evaluation Metrics** | Standard statistical loss: WAPE, MASE, RMSE (focused on model fit and accuracy). | Combines statistical metrics (WAPE, MASE) with asymmetric Newsvendor loss ($/day). | Directly reflects inventory trade-offs between holding costs and stockout penalties. |
+        | **7** | **Drift Monitoring** | Tracking signal monitoring or periodic error threshold alerts. | One-sided sequential CUSUM process control with automatic drift reset. | Enhances sensitivity to subtle, persistent demand erosion before inventory accumulates. |
+        | **8** | **Safety Stock Sizing** | Analytical parametric formula ($z \\cdot \\sigma \\cdot \\sqrt{L}$); scalable and standardized. | Non-parametric quantile extraction from simulated lead-time sample paths. | Adapts to positive demand skewness and empirical lead-time variance without normal assumptions. |
+        | **9** | **Decision Coupling** | Two-stage decoupled flow: Demand forecasting -> Downstream inventory policy module. | Direct coupling between forecast quantiles and the economic Critical Ratio ($CR$). | Aligns buffer stock protection with product profit margins without manual override. |
+        | **10** | **Compute Architecture** | Sequential execution or scheduled batch runs across the SKU catalog. | Thread-pinned Multiprocessing Pool allocating isolated CPU cores per worker process. | Scales multi-quantile training and scenario sampling across multi-core server hardware. |
         """)
 
     # Portfolio Accuracy Table
