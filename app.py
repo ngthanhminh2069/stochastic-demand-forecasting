@@ -7,7 +7,9 @@ Style: Modern Clean, Flat Accent Cards, Zero Marketing Slop.
 from __future__ import annotations
 
 import pickle
+from datetime import datetime
 from pathlib import Path
+import re
 
 import matplotlib
 matplotlib.use("Agg")
@@ -22,7 +24,23 @@ import streamlit as st
 PROJECT_ROOT = Path(__file__).resolve().parent
 CACHE_PATH = PROJECT_ROOT / "data" / "cache" / "demo_cache.pkl"
 FIGURES_DIR = PROJECT_ROOT / "reports" / "figures"
-PDF_PATH = PROJECT_ROOT / "Bao_Cao_Chi_Tiet_Workflow_Demand_Forecasting.pdf"
+
+
+def get_pdf_report_path() -> Path | None:
+    """Resolve the latest technical documentation PDF across possible locations."""
+    candidate_paths = [
+        PROJECT_ROOT / "Bao_Cao_Chi_Tiet_Workflow_Demand_Forecasting.pdf",
+        PROJECT_ROOT.parent / "Bao_Cao_Chi_Tiet_Workflow_Demand_Forecasting.pdf",
+        PROJECT_ROOT / "reports" / "Bao_Cao_Chi_Tiet_Workflow_Demand_Forecasting.pdf",
+    ]
+    existing = [p for p in candidate_paths if p.exists()]
+    if not existing:
+        return None
+    # Pick the most recently updated file if multiple exist
+    return max(existing, key=lambda p: p.stat().st_mtime)
+
+
+PDF_PATH = get_pdf_report_path()
 
 from src import config, hierarchy, inventory, scenarios
 
@@ -280,21 +298,38 @@ st.markdown(f"<h1 class='app-title'>{title_text}</h1>", unsafe_allow_html=True)
 st.markdown(f"<div class='app-subtitle'>{subtitle_text}</div>", unsafe_allow_html=True)
 
 # Technical Report PDF Download Button
-if PDF_PATH.exists():
-    with open(PDF_PATH, "rb") as f_pdf:
+current_pdf_path = get_pdf_report_path()
+if current_pdf_path and current_pdf_path.exists():
+    with open(current_pdf_path, "rb") as f_pdf:
         pdf_data = f_pdf.read()
+
+    # Dynamic metadata extraction
+    try:
+        pages_count = len(re.findall(rb"/Type\s*/Page\b", pdf_data))
+    except Exception:
+        pages_count = 0
+    size_mb = len(pdf_data) / (1024 * 1024)
+    mtime_str = datetime.fromtimestamp(current_pdf_path.stat().st_mtime).strftime("%d/%m/%Y")
+
+    meta_parts = []
+    if pages_count > 0:
+        meta_parts.append(f"{pages_count} trang" if is_vi else f"{pages_count} pages")
+    meta_parts.append(f"{size_mb:.1f} MB")
+    meta_parts.append(f"Cập nhật {mtime_str}" if is_vi else f"Updated {mtime_str}")
+    meta_str = " • ".join(meta_parts)
+
     c_dw1, c_dw2 = st.columns([3, 1])
     with c_dw1:
         st.caption(
-            "📄 Báo cáo Kỹ thuật Chuyên sâu (18 trang) phân tích chi tiết quy trình, công thức toán và mã nguồn."
+            f"📄 **Báo cáo Kỹ thuật Chuyên sâu** ({meta_str}): Phân tích chi tiết quy trình chuẩn công nghiệp, công thức toán học, ma trận benchmark và ánh xạ mã nguồn toàn diện."
             if is_vi
-            else "📄 Full Technical Documentation Report (18 pages) with equations, workflow mapping, and source code."
+            else f"📄 **Technical Documentation Report** ({meta_str}): Comprehensive industrial workflow analysis, mathematical formulations, benchmark matrix, and source code mapping."
         )
     with c_dw2:
         st.download_button(
             label="📥 Tải Báo Cáo PDF" if is_vi else "📥 Download PDF Report",
             data=pdf_data,
-            file_name="Bao_Cao_Chi_Tiet_Workflow_Demand_Forecasting.pdf",
+            file_name=current_pdf_path.name,
             mime="application/pdf",
             use_container_width=True,
         )

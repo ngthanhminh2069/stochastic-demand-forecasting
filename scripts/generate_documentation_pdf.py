@@ -99,6 +99,10 @@ def build_pdf(filename: str, figures_dir: Path):
     CODE_BORDER = colors.HexColor("#CBD5E1")   # Viền khối code
     
     styles = getSampleStyleSheet()
+    styles['Normal'].fontName = 'Arial'
+    styles['Normal'].fontSize = 9.5
+    styles['Normal'].leading = 14.5
+    styles['Normal'].textColor = DARK_TEXT
     
     body_style = ParagraphStyle(
         'VnBody',
@@ -471,17 +475,17 @@ def build_pdf(filename: str, figures_dir: Path):
         [
             Paragraph("<b>1. Giả định phân phối chuẩn (Gaussian assumption)</b>", table_cell),
             Paragraph("Công thức <i>z · σ · √L</i> bắt buộc nhu cầu mỗi ngày phải tuân theo phân phối chuẩn hình chuông cân đối và độc lập giữa các ngày.", table_cell),
-            Paragraph("Nhu cầu thực tế luôn lệch phải (Right-skewed, nhiều ngày bình thường nhưng có vài ngày đột biến cực lớn). Dùng công thức này sẽ làm <b>thiếu hụt tồn kho nghiêm trọng</b> vào những ngày bán chạy nhất!"),
+            Paragraph("Nhu cầu thực tế luôn lệch phải (Right-skewed, nhiều ngày bình thường nhưng có vài ngày đột biến cực lớn). Dùng công thức này sẽ làm <b>thiếu hụt tồn kho nghiêm trọng</b> vào những ngày bán chạy nhất!", table_cell),
         ],
         [
             Paragraph("<b>2. Bỏ qua chi phí kinh doanh bất đối xứng</b>", table_cell),
             Paragraph("Các chỉ số như MAE, RMSE coi sai số thừa 10 cái cũng tệ bằng sai số thiếu 10 cái (đối xứng).", table_cell),
-            Paragraph("Thực tế: Với mặt hàng lãi cao, thiếu 1 cái mất $30 lãi trong khi thừa 1 cái chỉ tốn $0.2 tiền lưu kho. Mô hình truyền thống phạt quá nặng việc trữ thừa dẫn đến hay bị cháy hàng."),
+            Paragraph("Thực tế: Với mặt hàng lãi cao, thiếu 1 cái mất $30 lãi trong khi thừa 1 cái chỉ tốn $0.2 tiền lưu kho. Mô hình truyền thống phạt quá nặng việc trữ thừa dẫn đến hay bị cháy hàng.", table_cell),
         ],
         [
             Paragraph("<b>3. Rò rỉ dữ liệu khi làm tính năng trễ (Data Leakage)</b>", table_cell),
             Paragraph("Khi dự báo 14 ngày tới, nếu lấy đặc trưng 'doanh số 7 ngày trước', vào ngày thứ 10 thì '7 ngày trước' rơi vào ngày thứ 3 của tương lai (chưa xảy ra).", table_cell),
-            Paragraph("Mô hình kiểm tra trên máy tính thì thấy kết quả rất đẹp (MAPE cực thấp), nhưng khi chạy thực tế ngoài đời thì sai số tăng vọt vì dùng dữ liệu tương lai."),
+            Paragraph("Mô hình kiểm tra trên máy tính thì thấy kết quả rất đẹp (MAPE cực thấp), nhưng khi chạy thực tế ngoài đời thì sai số tăng vọt vì dùng dữ liệu tương lai.", table_cell),
         ],
     ]
     flaw_tbl = Table(wf_flaws, colWidths=[120, 185, 200])
