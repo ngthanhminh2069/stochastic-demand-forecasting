@@ -23,6 +23,7 @@ import streamlit as st
 # Path configuration
 PROJECT_ROOT = Path(__file__).resolve().parent
 CACHE_PATH = PROJECT_ROOT / "data" / "cache" / "demo_cache.pkl"
+CACHE_GZ_PATH = PROJECT_ROOT / "data" / "cache" / "demo_cache.pkl.gz"
 FIGURES_DIR = PROJECT_ROOT / "reports" / "figures"
 
 
@@ -211,11 +212,26 @@ def render_info_card(title: str, content: str) -> None:
 
 @st.cache_resource(show_spinner="Loading data cache...")
 def load_cache():
-    if not CACHE_PATH.exists():
-        return None
-    with open(CACHE_PATH, "rb") as f:
-        data = pickle.load(f)
-    return data
+    # 1. Primary: load compressed gzipped cache (16MB, fast load on Cloud)
+    if CACHE_GZ_PATH.exists():
+        import gzip
+        with gzip.open(CACHE_GZ_PATH, "rb") as f:
+            return pickle.load(f)
+    # 2. Fallback: load uncompressed pickle if present locally
+    if CACHE_PATH.exists():
+        with open(CACHE_PATH, "rb") as f:
+            return pickle.load(f)
+    # 3. Fallback: check workspace parent folder
+    parent_gz = PROJECT_ROOT.parent / "data" / "cache" / "demo_cache.pkl.gz"
+    if parent_gz.exists():
+        import gzip
+        with gzip.open(parent_gz, "rb") as f:
+            return pickle.load(f)
+    parent_pkl = PROJECT_ROOT.parent / "data" / "cache" / "demo_cache.pkl"
+    if parent_pkl.exists():
+        with open(parent_pkl, "rb") as f:
+            return pickle.load(f)
+    return None
 
 
 cache = load_cache()
@@ -335,7 +351,7 @@ if current_pdf_path and current_pdf_path.exists():
         )
 
 if cache is None:
-    st.warning("⚠️ Cache file `data/cache/demo_cache.pkl` not found. Please run `python scripts/export_demo_cache.py`.")
+    st.warning("⚠️ Cache file `data/cache/demo_cache.pkl.gz` not found. Please run `python scripts/export_demo_cache.py`.")
     st.stop()
 
 # Cache data references

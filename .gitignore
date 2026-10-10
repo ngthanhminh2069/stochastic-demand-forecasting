@@ -3,6 +3,11 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ipynb_checkpoints/
-data/cache/
-*.pkl
+
+# Exclude general caches, but whitelist lightweight deployment cache
+data/cache/*
+!data/cache/demo_cache.pkl.gz
+
+# Whitelist project technical documentation PDF
 *.pdf
+!Bao_Cao_Chi_Tiet_Workflow_Demand_Forecasting.pdf
