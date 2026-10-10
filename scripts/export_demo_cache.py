@@ -26,8 +26,8 @@ logger = logging.getLogger("export_cache")
 def main() -> None:
     parser = argparse.ArgumentParser(description="Export demo cache for Streamlit dashboard")
     parser.add_argument("--n-jobs", type=int, default=12, help="Number of worker processes")
-    parser.add_argument("--out", type=str, default=str(ROOT / "data" / "cache" / "demo_cache.pkl"),
-                        help="Path to output pickle file")
+    parser.add_argument("--out", type=str, default=str(ROOT / "data" / "cache" / "demo_cache.pkl.gz"),
+                        help="Path to output compressed cache file (defaults to demo_cache.pkl.gz)")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -101,18 +101,25 @@ def main() -> None:
         "scenarios_data": scenarios_data,
     }
 
-    print(f"\nSaving uncompressed cache to {out_path}...")
-    with open(out_path, "wb") as f:
-        pickle.dump(cache, f, protocol=pickle.HIGHEST_PROTOCOL)
-    size_mb = out_path.stat().st_size / (1024 * 1024)
-    print(f"Uncompressed cache saved: {size_mb:.2f} MB")
-
-    gz_path = out_path.with_suffix(".pkl.gz") if out_path.suffix == ".pkl" else out_path.parent / (out_path.name + ".gz")
-    print(f"Saving compressed deployment cache to {gz_path}...")
-    with gzip.open(gz_path, "wb", compresslevel=6) as f_gz:
-        pickle.dump(cache, f_gz, protocol=pickle.HIGHEST_PROTOCOL)
-    gz_size_mb = gz_path.stat().st_size / (1024 * 1024)
-    print(f"Compressed cache saved: {gz_size_mb:.2f} MB (Optimized for Streamlit Cloud deployment)")
+    if str(out_path).endswith(".gz"):
+        print(f"\nSaving compressed deployment cache to {out_path}...")
+        with gzip.open(out_path, "wb", compresslevel=6) as f_gz:
+            pickle.dump(cache, f_gz, protocol=pickle.HIGHEST_PROTOCOL)
+        gz_size_mb = out_path.stat().st_size / (1024 * 1024)
+        print(f"Compressed cache saved: {gz_size_mb:.2f} MB (Optimized for Streamlit Cloud deployment)")
+    else:
+        print(f"\nSaving uncompressed cache to {out_path}...")
+        with open(out_path, "wb") as f:
+            pickle.dump(cache, f, protocol=pickle.HIGHEST_PROTOCOL)
+        size_mb = out_path.stat().st_size / (1024 * 1024)
+        print(f"Uncompressed cache saved: {size_mb:.2f} MB")
+        
+        gz_path = out_path.with_suffix(".pkl.gz")
+        print(f"Saving compressed deployment cache to {gz_path}...")
+        with gzip.open(gz_path, "wb", compresslevel=6) as f_gz:
+            pickle.dump(cache, f_gz, protocol=pickle.HIGHEST_PROTOCOL)
+        gz_size_mb = gz_path.stat().st_size / (1024 * 1024)
+        print(f"Compressed cache saved: {gz_size_mb:.2f} MB (Optimized for Streamlit Cloud deployment)")
 
 
 if __name__ == "__main__":

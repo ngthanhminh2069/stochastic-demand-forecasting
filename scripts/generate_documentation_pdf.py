@@ -1020,9 +1020,3 @@ if __name__ == "__main__":
     output_pdf_path = current_dir / "Bao_Cao_Chi_Tiet_Workflow_Demand_Forecasting.pdf"
     
     build_pdf(str(output_pdf_path), figures_path)
-    
-    workspace_root = current_dir.parent
-    root_pdf_path = workspace_root / "Bao_Cao_Chi_Tiet_Workflow_Demand_Forecasting.pdf"
-    if root_pdf_path.parent.exists():
-        shutil.copy(output_pdf_path, root_pdf_path)
-        print(f"Copied another copy to workspace root: {root_pdf_path}")
