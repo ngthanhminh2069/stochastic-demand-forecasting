@@ -83,6 +83,16 @@ def main() -> None:
             "val_records": r["val_records"],
         }
 
+    # Optimize array precision for compact storage and lightning-fast loading
+    import numpy as np
+    import gzip
+    if "samples" in scenarios_data and hasattr(scenarios_data["samples"], "astype"):
+        scenarios_data["samples"] = scenarios_data["samples"].astype(np.float32)
+    if "aggregates" in scenarios_data:
+        for k, arr in scenarios_data["aggregates"].items():
+            if hasattr(arr, "astype"):
+                scenarios_data["aggregates"][k] = arr.astype(np.float32)
+
     cache = {
         "version": "2.0",
         "raw_df": df,
@@ -91,12 +101,18 @@ def main() -> None:
         "scenarios_data": scenarios_data,
     }
 
-    print(f"\nSaving cache to {out_path}...")
+    print(f"\nSaving uncompressed cache to {out_path}...")
     with open(out_path, "wb") as f:
         pickle.dump(cache, f, protocol=pickle.HIGHEST_PROTOCOL)
-
     size_mb = out_path.stat().st_size / (1024 * 1024)
-    print(f"Demo cache exported successfully! File size: {size_mb:.2f} MB")
+    print(f"Uncompressed cache saved: {size_mb:.2f} MB")
+
+    gz_path = out_path.with_suffix(".pkl.gz") if out_path.suffix == ".pkl" else out_path.parent / (out_path.name + ".gz")
+    print(f"Saving compressed deployment cache to {gz_path}...")
+    with gzip.open(gz_path, "wb", compresslevel=6) as f_gz:
+        pickle.dump(cache, f_gz, protocol=pickle.HIGHEST_PROTOCOL)
+    gz_size_mb = gz_path.stat().st_size / (1024 * 1024)
+    print(f"Compressed cache saved: {gz_size_mb:.2f} MB (Optimized for Streamlit Cloud deployment)")
 
 
 if __name__ == "__main__":
