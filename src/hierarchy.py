@@ -23,9 +23,18 @@ accuracy to "borrow" from higher levels that matters more than getting the
 leaves right, and (2) it stays fully transparent — every aggregate number
 is traceable to a leaf forecast, which matters for stakeholder trust in a
 supply-chain context.
+
+**Point forecasts vs. distributions.** Summing is exact for *means/sums of
+samples*, but **not for quantiles**: the sum of leaf P90s is not the P90 of
+the total. Aggregate quantiles are therefore computed from **joint sample
+paths** (see `src/scenarios.py`), summed leaf-by-leaf, and only then
+summarised into quantiles (`aggregate_sample_paths`, `summarize_paths`).
+Because the paths carry the estimated cross-leaf dependence, the resulting
+aggregate bands are narrower than summed leaf quantiles (risk pooling).
 """
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from src import config
@@ -36,7 +45,8 @@ def aggregate_leaf_forecasts(
 ) -> dict[str, pd.Series]:
     """Bottom-up aggregate a dict of {(sku, location): forecast_series} into
     per-SKU, per-Location, and Total forecast series — all guaranteed
-    coherent with the leaves by construction.
+    coherent with the leaves by construction. Use for additive quantities
+    (point forecasts, means); use `aggregate_sample_paths` for quantiles.
     """
     sku_level: dict[str, pd.Series] = {}
     location_level: dict[str, pd.Series] = {}
@@ -54,6 +64,35 @@ def aggregate_leaf_forecasts(
         **{f"sku:{k}": v for k, v in sku_level.items()},
         **{f"location:{k}": v for k, v in location_level.items()},
     }
+
+
+def aggregate_sample_paths(
+    samples: np.ndarray, leaves: list[tuple[str, str]]
+) -> dict[str, np.ndarray]:
+    """Sum joint leaf sample paths into aggregates.
+
+    ``samples``: (n_samples, n_leaves, H) ordered as ``leaves``. Returns
+    ``{"total" | "sku:<id>" | "location:<id>": (n_samples, H)}`` - the same
+    keys as `aggregate_leaf_forecasts`.
+    """
+    out: dict[str, np.ndarray] = {"total": samples.sum(axis=1)}
+    skus = sorted({s for s, _ in leaves})
+    locs = sorted({l for _, l in leaves})
+    for sku in skus:
+        idx = [i for i, (s, _) in enumerate(leaves) if s == sku]
+        out[f"sku:{sku}"] = samples[:, idx, :].sum(axis=1)
+    for loc in locs:
+        idx = [i for i, (_, l) in enumerate(leaves) if l == loc]
+        out[f"location:{loc}"] = samples[:, idx, :].sum(axis=1)
+    return out
+
+
+def summarize_paths(
+    paths: np.ndarray, quantiles: list[float] = (config.BAND_LOW_Q, config.MEDIAN_Q, config.BAND_HIGH_Q)
+) -> pd.DataFrame:
+    """Quantiles of the *horizon-total* demand of (n_samples, H) paths."""
+    totals = paths.sum(axis=1)
+    return pd.DataFrame({"quantile": list(quantiles), "horizon_total": np.quantile(totals, list(quantiles))})
 
 
 def build_hierarchy_index(df: pd.DataFrame) -> pd.DataFrame:

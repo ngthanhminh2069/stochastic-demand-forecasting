@@ -4,10 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 
 from src import config
+
+
+def _qlabel(q: float) -> str:
+    return f"P{q * 100:g}"
 
 
 def _save(fig, name: str) -> Path:
@@ -24,7 +30,7 @@ def plot_quantile_fan(
     title: str,
     name: str,
 ) -> Path:
-    """Fan chart: actual demand vs. the P10/P50/P90 forecast band. This is
+    """Fan chart: actual demand vs. the P10-P90 (inner) and P5-P97.5 (outer) forecast bands. This is
     the visual that makes "probabilistic forecast" concrete — a shaded
     range you can size safety stock from, not just one line.
     """
@@ -33,13 +39,18 @@ def plot_quantile_fan(
              markersize=4, label="Actual")
 
     cols = sorted(quantile_forecast.columns)
-    low, mid, high = cols[0], cols[len(cols) // 2], cols[-1]
+    mid, low, high = config.MEDIAN_Q, config.BAND_LOW_Q, config.BAND_HIGH_Q
+    outer_low, outer_high = cols[0], cols[-1]
 
     ax.plot(quantile_forecast.index, quantile_forecast[mid], color="#1E40AF",
-             linewidth=1.8, linestyle="--", label=f"Median (P{int(mid*100)})")
+             linewidth=1.8, linestyle="--", label=f"Median ({_qlabel(mid)})")
+    ax.fill_between(
+        quantile_forecast.index, quantile_forecast[outer_low], quantile_forecast[outer_high],
+        color="#1E40AF", alpha=0.10, label=f"{_qlabel(outer_low)}\u2013{_qlabel(outer_high)} band"
+    )
     ax.fill_between(
         quantile_forecast.index, quantile_forecast[low], quantile_forecast[high],
-        color="#1E40AF", alpha=0.18, label=f"P{int(low*100)}\u2013P{int(high*100)} band"
+        color="#1E40AF", alpha=0.20, label=f"{_qlabel(low)}\u2013{_qlabel(high)} band"
     )
 
     ax.set_title(title, fontsize=13)
@@ -79,32 +90,64 @@ def plot_cusum(series: pd.Series, cusum_result, title: str, name: str) -> Path:
     return _save(fig, name)
 
 
-def plot_hierarchy_bars(aggregates: dict[str, pd.Series], name: str = "hierarchy_reconciliation") -> Path:
-    """Bar chart comparing the reconciled Total to the sum of SKU-level and
-    Location-level forecasts — the visual proof that bottom-up
-    reconciliation is coherent."""
-    total = aggregates["total"].sum()
-    sku_keys = sorted(k for k in aggregates if k.startswith("sku:"))
-    location_keys = sorted(k for k in aggregates if k.startswith("location:"))
+def plot_hierarchy_bars(aggregate_summary: pd.DataFrame, name: str = "hierarchy_reconciliation") -> Path:
+    """Aggregate demand over the forecast horizon by SKU and by Location.
+
+    Bars are the P50 of the *summed joint sample paths*; whiskers are the
+    P10-P90 of the aggregate. The red ticks show the **wrong but common**
+    alternative - adding up the leaf P90s - to make the risk-pooling gap
+    visible: aggregates are less uncertain than the sum of their parts.
+    """
+    s = aggregate_summary.set_index("aggregate")
+    p10, p50, p90 = (f"P{q * 100:g}" for q in (config.BAND_LOW_Q, config.MEDIAN_Q, config.BAND_HIGH_Q))
+    naive = f"naive_sum_of_leaf_{p90}"
+    total = s.loc["total"]
 
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+    for ax, prefix, color, label in (
+        (axes[0], "sku:", "#1E40AF", "SKU"), (axes[1], "location:", "#166534", "Location"),
+    ):
+        keys = sorted(k for k in s.index if k.startswith(prefix))
+        sub = s.loc[keys]
+        x = range(len(keys))
+        ax.bar(x, sub[p50], color=color, alpha=0.85, label=f"{p50} (joint sample paths)")
+        ax.errorbar(x, sub[p50], yerr=[sub[p50] - sub[p10], sub[p90] - sub[p50]],
+                    fmt="none", ecolor="black", capsize=3, linewidth=1, label=f"{p10}\u2013{p90}")
+        ax.scatter(x, sub[naive], marker="_", s=250, color="#991B1B", zorder=5,
+                   label=f"sum of leaf {p90}s (not a valid {p90})")
+        ax.set_xticks(list(x))
+        ax.set_xticklabels([k.split(":", 1)[1] for k in keys], rotation=45)
+        ax.set_title(f"By {label}", fontsize=11)
+        ax.grid(True, axis="y", linestyle="--", alpha=0.5)
+        ax.legend(fontsize=8, loc="upper right")
+    axes[0].set_ylabel("Demand over forecast horizon (units)")
 
-    sku_values = [aggregates[k].sum() for k in sku_keys]
-    axes[0].bar([k.replace("sku:", "") for k in sku_keys], sku_values, color="#1E40AF")
-    axes[0].axhline(0, color="black", linewidth=0.8)
-    axes[0].set_title(f"By SKU (sum = {sum(sku_values):,.0f}, Total = {total:,.0f})", fontsize=11)
-    axes[0].tick_params(axis="x", rotation=45)
-    axes[0].set_ylabel("Forecast demand (horizon sum)")
-    axes[0].grid(True, axis="y", linestyle="--", alpha=0.5)
+    fig.suptitle(
+        f"Bottom-up from joint sample paths - Total {p50} = {total[p50]:,.0f}, "
+        f"{p10}\u2013{p90} = {total[p10]:,.0f}\u2013{total[p90]:,.0f} "
+        f"(naive sum of leaf {p90}s = {total[naive]:,.0f})",
+        fontsize=12,
+    )
+    fig.tight_layout()
+    return _save(fig, name)
 
-    loc_values = [aggregates[k].sum() for k in location_keys]
-    axes[1].bar([k.replace("location:", "") for k in location_keys], loc_values, color="#166534")
-    axes[1].axhline(0, color="black", linewidth=0.8)
-    axes[1].set_title(f"By Location (sum = {sum(loc_values):,.0f}, Total = {total:,.0f})", fontsize=11)
-    axes[1].tick_params(axis="x", rotation=45)
-    axes[1].grid(True, axis="y", linestyle="--", alpha=0.5)
 
-    fig.suptitle("Bottom-Up Reconciliation: SKU and Location views both sum to Total", fontsize=13)
+def plot_coverage_by_horizon(coverage_by_horizon: pd.DataFrame, name: str = "coverage_by_horizon") -> Path:
+    """Empirical coverage of the P10-P90 band at each forecast horizon
+    (days ahead), pooled over every fold of every leaf. Spread grows with
+    horizon, so a calibration that only holds on average could hide
+    over-/under-coverage at short or long horizons - this is the check."""
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    ax.plot(coverage_by_horizon["h"], coverage_by_horizon["p10_p90_coverage"], marker="o",
+            color="#1E40AF", label="Observed coverage")
+    ax.axhline(coverage_by_horizon["nominal_coverage"].iloc[0], color="black", linestyle="--",
+               label=f"Nominal ({coverage_by_horizon['nominal_coverage'].iloc[0]:.0%})")
+    ax.set_ylim(0, 1)
+    ax.set_xlabel("Horizon h (days ahead of forecast origin)")
+    ax.set_ylabel("Fraction of actuals inside P10\u2013P90")
+    ax.set_title("P10\u2013P90 Coverage by Horizon", fontsize=12)
+    ax.legend(fontsize=9)
+    ax.grid(True, linestyle="--", alpha=0.5)
     fig.tight_layout()
     return _save(fig, name)
 
@@ -133,7 +176,8 @@ def plot_demand_distribution_and_seasonality(df: pd.DataFrame, name: str = "dema
     dow["dayofweek"] = dow[config.DATE_COL].dt.day_name()
     order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     data_by_day = [dow.loc[dow["dayofweek"] == d, config.TARGET_COL].values for d in order]
-    axes[1].boxplot(data_by_day, labels=[d[:3] for d in order], showfliers=False)
+    axes[1].boxplot(data_by_day, showfliers=False)
+    axes[1].set_xticklabels([d[:3] for d in order])
     axes[1].set_title("Demand by Day of Week (pooled, all leaves)", fontsize=12)
     axes[1].set_ylabel("Demand")
     axes[1].grid(True, axis="y", linestyle="--", alpha=0.5)
@@ -226,7 +270,7 @@ def plot_reliability_diagram(reliability_table: pd.DataFrame, name: str = "relia
     )
     for _, row in reliability_table.iterrows():
         ax.annotate(
-            f"P{int(row['nominal_quantile']*100)}\n(n={int(row['n_obs'])})",
+            f"{_qlabel(row['nominal_quantile'])}\n(n={int(row['n_obs'])})",
             (row["nominal_quantile"], row["empirical_fraction_below"]),
             textcoords="offset points", xytext=(10, -4), fontsize=8,
         )
@@ -251,7 +295,8 @@ def plot_pinball_by_quantile(pinball_df: pd.DataFrame, name: str = "pinball_loss
     data = [pinball_df.loc[pinball_df["quantile"] == q, "pinball_loss"].dropna().values for q in quantiles]
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.boxplot(data, labels=[f"P{int(q*100)}" for q in quantiles])
+    ax.boxplot(data)
+    ax.set_xticklabels([_qlabel(q) for q in quantiles])
     ax.set_title("Pinball Loss by Quantile, Across All SKU x Location Leaves", fontsize=12)
     ax.set_ylabel("Mean pinball loss (per leaf)")
     ax.grid(True, axis="y", linestyle="--", alpha=0.5)
@@ -279,7 +324,7 @@ def plot_leaf_accuracy_distribution(leaf_summary: pd.DataFrame, name: str = "lea
     axes[1].scatter(leaf_summary["avg_price"], leaf_summary["mean_cost_per_day"], color="#166534", alpha=0.7)
     axes[1].set_title("Newsvendor Cost vs. SKU Price", fontsize=12)
     axes[1].set_xlabel("Average unit price ($)")
-    axes[1].set_ylabel("Mean newsvendor cost ($/day)")
+    axes[1].set_ylabel("Mean newsvendor cost ($/unit-day, at critical-ratio quantile)")
     axes[1].grid(True, linestyle="--", alpha=0.5)
 
     fig.tight_layout()
